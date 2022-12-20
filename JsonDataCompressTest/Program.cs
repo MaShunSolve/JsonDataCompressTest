@@ -3,7 +3,8 @@ using Newtonsoft.Json;
 using System.Diagnostics;
 using System.IO.Compression;
 using System.Runtime.InteropServices;
-using System.Runtime.Serialization.Formatters.Binary;
+//using System.Runtime.Serialization.Formatters.Binary;
+using System.Text;
 
 internal class Program
 {
@@ -62,18 +63,17 @@ internal class Program
     /// <returns></returns>
     public static string Compress(string jsonStr)
     {
+        string base64Str = "";
         Stopwatch sw = Stopwatch.StartNew();
         sw.Start();
-        MemoryStream zippedStream = new MemoryStream();
-        using (GZipStream gzip = new GZipStream(zippedStream, CompressionMode.Compress))
+        byte[] buffer = Encoding.UTF8.GetBytes(jsonStr);
+        using (var zippedStream = new MemoryStream())
+        using (var zip = new GZipStream(zippedStream, CompressionMode.Compress))
         {
-            BinaryFormatter bfmt = new BinaryFormatter();
-            bfmt.Serialize(gzip, jsonStr);
-            gzip.Flush();
+            zip.Write(buffer, 0, buffer.Length);
+            zip.Close();
+            base64Str = Convert.ToBase64String(zippedStream.ToArray());
         }
-
-        byte[] zippedBuf = zippedStream.ToArray();
-        string base64Str = Convert.ToBase64String(zippedBuf);
         sw.Stop();
         string filePath = GetFilePath(2);
         WriteFile(filePath, base64Str);
@@ -88,21 +88,22 @@ internal class Program
     /// <param name="base64Str"></param>
     public static void Decompress(string base64Str)
     {
-        Stopwatch sw = new Stopwatch();
+        Stopwatch sw = Stopwatch.StartNew();
         sw.Start();
-        string jsonStr;
-        byte[] data = Convert.FromBase64String(base64Str);
-        MemoryStream zippedStream = new MemoryStream(data);
-        using (GZipStream gzip = new GZipStream(zippedStream, CompressionMode.Decompress))
+        byte[] buffer = Convert.FromBase64String(base64Str);
+        using (var inStream = new MemoryStream(buffer))
+        using (var outStream = new MemoryStream())
+        using (var zip = new GZipStream(inStream, CompressionMode.Decompress))
         {
-            BinaryFormatter bfmt = new BinaryFormatter();
-            jsonStr = (string)bfmt.Deserialize(gzip);
+            zip.CopyTo(outStream);
+            zip.Close();
+
+            string jsonStr = Encoding.UTF8.GetString(outStream.ToArray());
+            sw.Stop();
+            string filePath = GetFilePath(3);
+            WriteFile(filePath, jsonStr);
+            Console.WriteLine($"解壓縮共耗時{sw.ElapsedMilliseconds}毫秒");
         }
-        sw.Stop();
-        string filePath = GetFilePath(3);
-        WriteFile(filePath, jsonStr);
-        Console.WriteLine($"解壓縮共耗時{sw.ElapsedMilliseconds}毫秒");
-        Console.ReadKey();
     }
     #endregion
     /// <summary>
